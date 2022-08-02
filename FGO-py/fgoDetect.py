@@ -50,9 +50,15 @@ class Detect(metaclass=logMeta(logger)):
         # cv2.imwrite(time.strftime(f'fgoTemp/Crop_%Y-%m-%d_%H.%M.%S_{rect}.png',time.localtime(self.time)),self.im[rect[1]+2:rect[3]-2,rect[0]+2:rect[2]-2],[cv2.IMWRITE_PNG_COMPRESSION,9])
         return self.im[rect[1]:rect[3],rect[0]:rect[2]]
     # @logit(logger)
-    def _loc(self,img,rect=(0,0,1280,720)):return cv2.minMaxLoc(cv2.matchTemplate(self._crop(rect),img[0],cv2.TM_SQDIFF_NORMED,mask=img[1]))
-    def _compare(self,img,rect=(0,0,1280,720),threshold=.05):return threshold>self._loc(img,rect)[0]and fuse.reset(self)
-    def _select(self,img,rect=(0,0,1280,720),threshold=.2):return(lambda x:numpy.argmin(x)if threshold>min(x)else None)([self._loc(i,rect)[0]for i in img])
+    def _loc(self,img,rect=(0,0,1280,720)):
+        # cv2.imwrite(time.strftime(f'fgoTemp/loc_%Y-%m-%d_%H.%M.%S_{rect}.png',time.localtime(self.time)),self.im[rect[1]+2:rect[3]-2,rect[0]+2:rect[2]-2],[cv2.IMWRITE_PNG_COMPRESSION,9])
+        return cv2.minMaxLoc(cv2.matchTemplate(self._crop(rect),img[0],cv2.TM_SQDIFF_NORMED,mask=img[1]))
+    def _compare(self,img,rect=(0,0,1280,720),threshold=.05):
+        # cv2.imwrite(time.strftime(f'fgoTemp/compare_%Y-%m-%d_%H.%M.%S_{rect}.png',time.localtime(self.time)),self.im[rect[1]+2:rect[3]-2,rect[0]+2:rect[2]-2],[cv2.IMWRITE_PNG_COMPRESSION,9])
+        return threshold>self._loc(img,rect)[0]and fuse.reset(self)
+    def _select(self,img,rect=(0,0,1280,720),threshold=.2):
+        # cv2.imwrite(time.strftime(f'fgoTemp/select_%Y-%m-%d_%H.%M.%S_{rect}.png',time.localtime(self.time)),self.im[rect[1]+2:rect[3]-2,rect[0]+2:rect[2]-2],[cv2.IMWRITE_PNG_COMPRESSION,9])
+        return(lambda x:numpy.argmin(x)if threshold>min(x)else None)([self._loc(i,rect)[0]for i in img])
     def _find(self,img,rect=(0,0,1280,720),threshold=.05):return(lambda loc:((rect[0]+loc[2][0]+(img[0].shape[1]>>1),rect[1]+loc[2][1]+(img[0].shape[0]>>1)),fuse.reset(self))[0]if loc[0]<threshold else None)(self._loc(img,rect))
     def _ocr(self,rect):return reduce(lambda x,y:x*10+y[1],(lambda contours,hierarchy:sorted(((pos,loc[2][0]//20)for pos,loc in((clip[0],cv2.minMaxLoc(cv2.matchTemplate(IMG.OCR[0],numpy.array([[[255*(cv2.pointPolygonTest(contours[i],(clip[0]+x,clip[1]+y),False)>=0 and(hierarchy[0][i][2]==-1 or cv2.pointPolygonTest(contours[hierarchy[0][i][2]],(clip[0]+x,clip[1]+y),False)<0))]*3 for x in range(clip[2])]for y in range(clip[3])],dtype=numpy.uint8),cv2.TM_SQDIFF_NORMED)))for i,clip in((i,cv2.boundingRect(contours[i]))for i in range(len(contours))if hierarchy[0][i][3]==-1)if 8<clip[2]<20<clip[3]<27)if loc[0]<.3),key=lambda x:x[0]))(*cv2.findContours(cv2.threshold(cv2.resize(cv2.cvtColor(self._crop(rect),cv2.COLOR_BGR2GRAY),(0,0),fx=1.5,fy=1.5,interpolation=cv2.INTER_CUBIC),150,255,cv2.THRESH_BINARY)[1],cv2.RETR_CCOMP,cv2.CHAIN_APPROX_SIMPLE)),0)
     def _count(self,img,rect=(0,0,1280,720),threshold=.1):return cv2.connectedComponents((cv2.matchTemplate(self._crop(rect),img[0],cv2.TM_SQDIFF_NORMED,mask=img[1])<threshold).astype(numpy.uint8))[0]-1
@@ -125,22 +131,21 @@ class Detect(metaclass=logMeta(logger)):
     def getCardServant(self,choices):...
     def getEnemyHp(self,pos):return self._ocr((100+250*pos,41,222+250*pos,65))
     def getEnemyNp(self,pos):return(lambda count:(lambda c2:(c2,c2)if c2 else(lambda c0,c1:(c1,c0+c1))(count(IMG.CHARGE0),count(IMG.CHARGE1),))(count(IMG.CHARGE2)))(lambda img:self._count(img,(160+250*pos,67,250+250*pos,88)))
-    def getFieldServant(self,pos):return(lambda img,cls:min((numpy.min(cv2.matchTemplate(img,i[...,:3],cv2.TM_SQDIFF_NORMED,mask=i[...,3])),no)for no,(_,portrait,_)in servantImg.items()if servantData[no][0]==cls[0]for i in portrait)[1]if cls else 0)(self._crop((120+318*pos,421,207+318*pos,490)),self.getFieldServantClassRank(pos))
-    def getFieldServantClassRank(self,pos):return(lambda x:x if x is None else divmod(x,3))(self._select(CLASS[125],(13+318*pos,618,117+318*pos,702)))
+    def getFieldServant(self,pos):return(lambda img,cls:min((numpy.min(cv2.matchTemplate(img,i[...,:3],cv2.TM_SQDIFF_NORMED,mask=i[...,3])),no)for no,(_,portrait,_)in servantImg.items()if(servantData[no][0],servantData[no][1])==cls for i in portrait)[1]if cls else 0)(self._crop((120+318*pos,421,207+318*pos,490)),self.getFieldServantClassRank(pos))
+    def getFieldServantClassRank(self,pos):return(lambda x:divmod(x,3)if x else None)(self._select(CLASS[125],(13+318*pos,618,117+318*pos,702)))
     def getFieldServantHp(self,pos):return self._ocr((200+318*pos,620,293+318*pos,644))
     def getFieldServantNp(self,pos):return self._ocr((220+318*pos,655,274+318*pos,680))
     def getSkillTargetCount(self):return(lambda x:numpy.bincount(numpy.diff(x))[1]+x[0])(cv2.dilate(numpy.max(cv2.threshold(numpy.max(self._crop((306,320,973,547)),axis=2),57,1,cv2.THRESH_BINARY)[1],axis=0).reshape(1,-1),numpy.ones((1,66),numpy.uint8)).ravel())if self._compare(IMG.CROSS,(1083,139,1113,166))else 0
     @retryOnError()
-    def getStage(self):return self._select((IMG.STAGE1,IMG.STAGE2,IMG.STAGE3),(884,13,902,38),.5)+1
+    def getStage(self):return self._select((IMG.STAGE1,IMG.STAGE2,IMG.STAGE3),(880,13,900,38),.5)+1
     @retryOnError()
     def getStageTotal(self):return self._select((IMG.STAGE1,IMG.STAGE2,IMG.STAGE3),(912,13,932,38),.5)+1
     def getTeamIndex(self):return self._loc(IMG.TEAMINDEX,(512,34,768,62))[2][0]//25
-    # getTeam* series except getTeamIndex APIs are not used now
     def getTeamMaster(self):...
     def getTeamServant(self):...
     def getTeamServantAtk(self):...
     def getTeamServantCard(self):return[reduce(lambda x,y:x<<1|y,(numpy.argmax(self.im[526,150+200*i+15*(i>2)+21*j])==0 for j in range(3)))for i in range(6)]
-    def getTeamServantClassRank(self):return[(lambda x:x if x is None else divmod(x,3))(self._select(CLASS[100],(30+200*i+15*(i>2),133,115+200*i+15*(i>2),203)))for i in range(6)]
+    def getTeamServantClassRank(self):return[(lambda x:(0,0)if x is None else divmod(x,3))(self._select(CLASS[100],(30+200*i+15*(i>2),133,115+200*i+15*(i>2),203)))for i in range(6)]
     def getTeamServantCost(self):...
     def getTeamServantHouguLv(self):...
     def getTeamServantSkillLv(self):...

@@ -20,7 +20,7 @@
 from fgoConst import VERSION
 __version__=VERSION
 __author__='hgjazhgj'
-import logging,time,numpy
+import logging,re,time,numpy
 import fgoDevice
 from itertools import permutations
 from threading import Thread
@@ -89,33 +89,30 @@ class Turn:
     def __init__(self):
         self.stage=0
         self.stageTurn=0
+        self.servant=[]
         self.countDown=[[[0,0,0],[0,0,0],[0,0,0]],[0,0,0]]
     def __call__(self,turn):
         self.stage,self.stageTurn=[t:=Detect(.2).getStage(),1+self.stageTurn*(self.stage==t)]
         if turn==1:
             Detect.cache.setupServantDead()
             self.stageTotal=Detect.cache.getStageTotal()
-            self.servant=[(lambda x:(x,)+servantData.get(x,()))(Detect.cache.getFieldServant(i))for i in range(3)]
-        else:
-            for i in(i for i in range(3)if Detect.cache.isServantDead(i)):
-                self.servant[i]=(lambda x:(x,)+servantData.get(x,()))(Detect.cache.getFieldServant(i))
-                self.countDown[0][i]=[0,0,0]
-        logger.info(f'Turn {turn} Stage {self.stage} StageTurn {self.stageTurn} {[i[0]for i in self.servant]}')
+            self.servant=[servantData.get(Detect.cache.getFieldServant(i),None)for i in range(3)]
+        else:self.servant=[servantData.get(Detect.cache.getFieldServant(i),None)if Detect.cache.isServantDead(i)else self.servant[i]for i in range(3)]
+        logger.info(f'Turn {turn} Stage {self.stage} StageTurn {self.stageTurn} {self.servant}')
         if self.stageTurn==1:fgoDevice.device.perform('\x67\x68\x69'[numpy.argmax([Detect.cache.getEnemyHp(i)for i in range(3)])]+'\xBB',(800,500))
         self.dispatchSkill()
-        self.enemy=[Detect.cache.getEnemyHp(i)for i in range(3)]
         fgoDevice.device.perform(' ',(2100,))
         fgoDevice.device.perform(self.selectCard(),(300,300,2300,1300,6000))
     def dispatchSkill(self):
         self.countDown=[[[max(0,j-1)for j in i]for i in self.countDown[0]],[max(0,i-1)for i in self.countDown[1]]]
-        while skill:=[(0,i,j)for i in range(3)for j in range(3)if 0==self.countDown[0][i][j]and self.servant[i][0]and self.servant[i][6][j][0]and Detect.cache.isSkillReady(i,j)]: # +[(1,i)for i in range(3)if self.countDown[1][i]==0]:
+        while skill:=[(0,i,j)for i in range(3)for j in range(3)if 0==self.countDown[0][i][j]and self.servant[i]and self.servant[i][5][j][0]and Detect.cache.isSkillReady(i,j)]: # +[(1,i)for i in range(3)if self.countDown[1][i]==0]:
             for i in skill:
                 if i[0]==0:
-                    if (p:=self.servant[i[1]][6][i[2]])[0]==1:
+                    if (p:=self.servant[i[1]][5][i[2]])[0]==1:
                         self.castServantSkill(i[1],i[2],i[1])
                         continue
                     elif p[0]==2:
-                        np=[Detect.cache.getFieldServantNp(i)if self.servant[i][0]else 100 for i in range(3)]
+                        np=[Detect.cache.getFieldServantNp(i)if self.servant[i]else 100 for i in range(3)]
                         if p[0]==0:
                             if any(i<100 for i in np):
                                 self.castServantSkill(i[1],i[2],0)
@@ -142,7 +139,7 @@ class Turn:
                             self.castServantSkill(i[1],i[2],0)
                             continue
                     elif p[0]==3:
-                        np=[Detect.cache.getFieldServantNp(i)if self.servant[i][0]else 0 for i in range(3)]
+                        np=[Detect.cache.getFieldServantNp(i)if self.servant[i]else 0 for i in range(3)]
                         if p[1]in{0,3,4}:
                             if any(i>=100 for i in np):
                                 self.castServantSkill(i[1],i[2],0)
@@ -168,7 +165,7 @@ class Turn:
                         self.castServantSkill(i[1],i[2],0)
                         continue
                     elif p[0]==7:
-                        hp=[Detect.cache.getFieldServantHp(i)if self.servant[i][0]else 999999 for i in range(3)]
+                        hp=[Detect.cache.getFieldServantHp(i)if self.servant[i]else 999999 for i in range(3)]
                         if p[1]==0:
                             if any(i<4000 for i in hp):
                                 self.castServantSkill(i[1],i[2],0)
@@ -194,11 +191,11 @@ class Turn:
                             self.castServantSkill(i[1],i[2],0)
                             continue
                     elif p[0]==8:
-                        if any(self.servant[i][0]and(lambda x:x[1]and x[0]==x[1])(Detect.cache.getEnemyNp(i))for i in range(3)):
+                        if any(self.servant[i]and(lambda x:x[1]and x[0]==x[1])(Detect.cache.getEnemyNp(i))for i in range(3)):
                             self.castServantSkill(i[1],i[2],i[1])
                             continue
                     elif p[0]==9:
-                        if any(self.servant[i][0]and((lambda x:x[1]and x[0]==x[1])(Detect.cache.getEnemyNp(i))or Detect.cache.getFieldServantHp(i)<2500)for i in range(3)):
+                        if any(self.servant[i]and((lambda x:x[1]and x[0]==x[1])(Detect.cache.getEnemyNp(i))or Detect.cache.getFieldServantHp(i)<2500)for i in range(3)):
                             self.castServantSkill(i[1],i[2],i[1])
                             continue
                     self.countDown[0][i[1]][i[2]]=1
@@ -216,14 +213,14 @@ class Turn:
     def castServantSkill(self,pos,skill,target):
         fgoDevice.device.press(('ASD','FGH','JKL')[pos][skill])
         if Detect(.7).isSkillNone():
-            logger.warning(f'Skill {pos} {skill} Disabled')
+            logger.warning(f'Skill {pos} {skill} None')
             self.countDown[0][pos][skill]=999
             fgoDevice.device.press('\x08')
         elif Detect.cache.isSkillCastFailed():
             logger.warning(f'Skill {pos} {skill} Cast Failed')
             self.countDown[0][pos][skill]=1
             fgoDevice.device.press('J')
-        elif t:=Detect.cache.getSkillTargetCount():fgoDevice.device.perform(['3333','2244','3234'][t-1][f-5 if(f:=self.servant[pos][6][skill][1])in{6,7,8}else target],(300,))
+        elif t:=Detect.cache.getSkillTargetCount():fgoDevice.device.perform(['3333','2244','3234'][t-1][f-5 if(f:=self.servant[pos][5][skill][1])in{6,7,8}else target],(300,))
         fgoDevice.device.press('\x08')
         while not Detect().isTurnBegin():pass
         Detect(.5)
@@ -318,7 +315,9 @@ class Main:
         while True:
             timer=time.time()
             while True:
-                for i in(i for i,j in friendImg.items()if(lambda pos:pos and(fgoDevice.device.touch(pos),True)[-1])(Detect.cache.findFriend(j))):return i
+                for i in(i for i,j in friendImg.items()if(lambda pos:pos and(fgoDevice.device.touch(pos),True)[-1])(Detect.cache.findFriend(j))):
+                    Turn.friendInfo=(lambda r:(lambda p:([[[-1 if p[i*4+j]=='X'else int(p[i*4+j],16)for j in range(4)]for i in range(3)],[-1 if p[i+12]=='X'else int(p[i+12],16)for i in range(2)]]))(r.group())if r else[[[-1,-1,-1,-1],[-1,-1,-1,-1],[-1,-1,-1,-1]],[-1,-1]])(re.match('([0-9X]{3}[0-9A-FX]){3}[0-9X][0-9A-FX]$',i.replace('-','')[-14:].upper()))
+                    return i
                 if Detect.cache.isFriendListEnd():break
                 fgoDevice.device.swipe((400,600,400,200))
                 Detect(.4)

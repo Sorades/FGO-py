@@ -1,12 +1,12 @@
 {
-    "device": "",
+    "device": "FEEIGU9DZLTWOJHY",
     "package": "com.bilibili.fatego",
-    "teamIndex": 0,
+    "teamIndex": 1,
     "stopOnDefeated": true,
     "stopOnKizunaReisou": true,
     "stayOnTop": false,
     "closeToTray": false,
-    "notifyEnable": false,
+    "notifyEnable": true,
     "notifyParam": {
         "scKey": ""
     }
